@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Plus, FolderOpen, Loader2, Search } from "lucide-react";
+import { Plus, FolderOpen, Loader2, Search, Globe, Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
@@ -14,6 +14,8 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
+import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { CollectionDetail } from "@/components/collection-detail";
 import { formatDistanceToNow } from "date-fns";
@@ -22,6 +24,7 @@ interface Collection {
   _id: string;
   name: string;
   description: string;
+  isPublic: boolean;
   elementCount: number;
   createdAt: string;
   updatedAt: string;
@@ -35,6 +38,7 @@ export function CollectionsView() {
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState("");
   const [newDesc, setNewDesc] = useState("");
+  const [newIsPublic, setNewIsPublic] = useState(false);
   const [selectedCollection, setSelectedCollection] = useState<Collection | null>(null);
 
   const fetchCollections = useCallback(async () => {
@@ -64,7 +68,7 @@ export function CollectionsView() {
       const res = await fetch("/api/collections", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: newName, description: newDesc }),
+        body: JSON.stringify({ name: newName, description: newDesc, isPublic: newIsPublic }),
       });
       if (!res.ok) throw new Error("Failed to create");
       const created = await res.json();
@@ -72,6 +76,7 @@ export function CollectionsView() {
       setCreateOpen(false);
       setNewName("");
       setNewDesc("");
+      setNewIsPublic(false);
       toast.success("Collection created");
     } catch {
       toast.error("Failed to create collection");
@@ -119,7 +124,7 @@ export function CollectionsView() {
       {/* Page Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Collections</h1>
+          <h1 className="text-3xl font-bold tracking-tight font-display">Collections</h1>
           <p className="mt-1 text-sm text-muted-foreground">
             Organize your visual assets into collections
           </p>
@@ -187,6 +192,13 @@ export function CollectionsView() {
                   <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-muted">
                     <FolderOpen className="h-5 w-5 text-muted-foreground transition-colors group-hover:text-foreground" />
                   </div>
+                  <Badge variant="secondary" className="text-xs">
+                    {collection.isPublic ? (
+                      <><Globe className="mr-1 h-3 w-3" /> Public</>
+                    ) : (
+                      <><Lock className="mr-1 h-3 w-3" /> Private</>
+                    )}
+                  </Badge>
                 </div>
                 <div className="mt-4">
                   <h3 className="font-semibold tracking-tight transition-colors group-hover:text-foreground">
@@ -242,6 +254,17 @@ export function CollectionsView() {
                 value={newDesc}
                 onChange={(e) => setNewDesc(e.target.value)}
                 rows={3}
+              />
+            </div>
+            <div className="flex items-center justify-between rounded-lg border p-3">
+              <div className="space-y-0.5">
+                <Label htmlFor="public" className="text-sm font-medium">Public Collection</Label>
+                <p className="text-xs text-muted-foreground">Anyone can view this collection</p>
+              </div>
+              <Switch
+                id="public"
+                checked={newIsPublic}
+                onCheckedChange={setNewIsPublic}
               />
             </div>
             <div className="flex justify-end gap-2 pt-2">

@@ -9,6 +9,9 @@ import {
   Loader2,
   X,
   Filter,
+  Globe,
+  Lock,
+  Pencil,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -28,6 +31,10 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { CreateElementDialog } from "@/components/create-element-dialog";
 import { ImageLightbox } from "@/components/image-lightbox";
@@ -36,6 +43,7 @@ interface Collection {
   _id: string;
   name: string;
   description: string;
+  isPublic: boolean;
   elementCount: number;
   createdAt: string;
 }
@@ -67,7 +75,27 @@ export function CollectionDetail({
   const [createOpen, setCreateOpen] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [isPublic, setIsPublic] = useState(collection.isPublic ?? false);
+  const [togglingVisibility, setTogglingVisibility] = useState(false);
   const [lightboxElement, setLightboxElement] = useState<Element | null>(null);
+
+  // Edit collection state
+  const [editCollectionOpen, setEditCollectionOpen] = useState(false);
+  const [editName, setEditName] = useState(collection.name);
+  const [editDesc, setEditDesc] = useState(collection.description || "");
+  const [editIsPublic, setEditIsPublic] = useState(collection.isPublic ?? false);
+  const [savingCollection, setSavingCollection] = useState(false);
+
+  // Edit element state
+  const [editElementOpen, setEditElementOpen] = useState(false);
+  const [editingElement, setEditingElement] = useState<Element | null>(null);
+  const [editElementDesc, setEditElementDesc] = useState("");
+  const [editElementTags, setEditElementTags] = useState("");
+  const [savingElement, setSavingElement] = useState(false);
+
+  // Current display name/desc (updated after edit)
+  const [displayName, setDisplayName] = useState(collection.name);
+  const [displayDesc, setDisplayDesc] = useState(collection.description || "");
 
   const fetchElements = useCallback(async () => {
     try {
@@ -132,6 +160,91 @@ export function CollectionDetail({
     setDeleteConfirmOpen(false);
   };
 
+  const toggleVisibility = async () => {
+    setTogglingVisibility(true);
+    try {
+      const res = await fetch(`/api/collections/${collection._id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isPublic: !isPublic }),
+      });
+      if (!res.ok) throw new Error("Failed to update");
+      setIsPublic(!isPublic);
+      setEditIsPublic(!isPublic);
+      toast.success(isPublic ? "Collection is now private" : "Collection is now public");
+    } catch {
+      toast.error("Failed to update visibility");
+    } finally {
+      setTogglingVisibility(false);
+    }
+  };
+
+  const handleEditCollection = async () => {
+    if (!editName.trim()) {
+      toast.error("Collection name is required");
+      return;
+    }
+    setSavingCollection(true);
+    try {
+      const res = await fetch(`/api/collections/${collection._id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: editName.trim(), description: editDesc.trim(), isPublic: editIsPublic }),
+      });
+      if (!res.ok) throw new Error("Failed to update");
+      setDisplayName(editName.trim());
+      setDisplayDesc(editDesc.trim());
+      setIsPublic(editIsPublic);
+      setEditCollectionOpen(false);
+      toast.success("Collection updated");
+    } catch {
+      toast.error("Failed to update collection");
+    } finally {
+      setSavingCollection(false);
+    }
+  };
+
+  const openEditElement = (element: Element) => {
+    setEditingElement(element);
+    setEditElementDesc(element.description);
+    setEditElementTags(element.tags.join(", "));
+    setEditElementOpen(true);
+  };
+
+  const handleEditElement = async () => {
+    if (!editingElement) return;
+    if (!editElementDesc.trim()) {
+      toast.error("Description is required");
+      return;
+    }
+    setSavingElement(true);
+    try {
+      const tags = editElementTags
+        .split(",")
+        .map((t) => t.trim().toLowerCase())
+        .filter(Boolean);
+      const res = await fetch(
+        `/api/collections/${collection._id}/elements/${editingElement._id}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ description: editElementDesc.trim(), tags }),
+        }
+      );
+      if (!res.ok) throw new Error("Failed to update");
+      const updated = await res.json();
+      setElements((prev) => prev.map((e) => (e._id === updated._id ? updated : e)));
+      fetchTags();
+      setEditElementOpen(false);
+      setEditingElement(null);
+      toast.success("Element updated");
+    } catch {
+      toast.error("Failed to update element");
+    } finally {
+      setSavingElement(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Navigation & Header */}
@@ -141,19 +254,47 @@ export function CollectionDetail({
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <div className="min-w-0 flex-1">
-            <h1 className="truncate text-2xl font-bold tracking-tight">
-              {collection.name}
+            <h1 className="truncate text-2xl font-bold tracking-tight font-display">
+              {displayName}
             </h1>
-            {collection.description && (
+            {displayDesc && (
               <p className="mt-0.5 truncate text-sm text-muted-foreground">
-                {collection.description}
+                {displayDesc}
               </p>
             )}
           </div>
           <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-2 text-xs"
+              onClick={toggleVisibility}
+              disabled={togglingVisibility}
+            >
+              {togglingVisibility ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : isPublic ? (
+                <Globe className="h-3 w-3" />
+              ) : (
+                <Lock className="h-3 w-3" />
+              )}
+              {isPublic ? "Public" : "Private"}
+            </Button>
             <Button onClick={() => setCreateOpen(true)} className="gap-2">
               <Plus className="h-4 w-4" />
               <span className="hidden sm:inline">Add Element</span>
+            </Button>
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => {
+                setEditName(displayName);
+                setEditDesc(displayDesc);
+                setEditIsPublic(isPublic);
+                setEditCollectionOpen(true);
+              }}
+            >
+              <Pencil className="h-4 w-4" />
             </Button>
             <Button
               variant="outline"
@@ -283,6 +424,10 @@ export function CollectionDetail({
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
+                      <DropdownMenuItem onClick={() => openEditElement(element)}>
+                        <Pencil className="mr-2 h-4 w-4" />
+                        Edit
+                      </DropdownMenuItem>
                       <DropdownMenuItem
                         className="text-destructive focus:text-destructive"
                         onClick={() => handleDeleteElement(element._id)}
@@ -314,6 +459,114 @@ export function CollectionDetail({
           onClose={() => setLightboxElement(null)}
         />
       )}
+
+      {/* Edit Collection Dialog */}
+      <Dialog open={editCollectionOpen} onOpenChange={setEditCollectionOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Edit Collection</DialogTitle>
+            <DialogDescription>
+              Update your collection details.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 pt-2">
+            <div className="space-y-2">
+              <Label htmlFor="edit-name">Name</Label>
+              <Input
+                id="edit-name"
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleEditCollection()}
+                autoFocus
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-desc">Description</Label>
+              <Textarea
+                id="edit-desc"
+                value={editDesc}
+                onChange={(e) => setEditDesc(e.target.value)}
+                rows={3}
+              />
+            </div>
+            <div className="flex items-center justify-between rounded-lg border p-3">
+              <div className="space-y-0.5">
+                <Label htmlFor="edit-public" className="text-sm font-medium">Public Collection</Label>
+                <p className="text-xs text-muted-foreground">Anyone can view this collection</p>
+              </div>
+              <Switch
+                id="edit-public"
+                checked={editIsPublic}
+                onCheckedChange={setEditIsPublic}
+              />
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button variant="outline" onClick={() => setEditCollectionOpen(false)}>
+                Cancel
+              </Button>
+              <Button onClick={handleEditCollection} disabled={savingCollection} className="gap-2">
+                {savingCollection && <Loader2 className="h-4 w-4 animate-spin" />}
+                Save Changes
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Element Dialog */}
+      <Dialog open={editElementOpen} onOpenChange={(open) => {
+        setEditElementOpen(open);
+        if (!open) setEditingElement(null);
+      }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Edit Element</DialogTitle>
+            <DialogDescription>
+              Update the description and tags for this element.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 pt-2">
+            {editingElement && (
+              <div className="mx-auto h-32 w-32 overflow-hidden rounded-lg bg-muted">
+                <img
+                  src={editingElement.thumbnailUrl || editingElement.imageUrl}
+                  alt={editingElement.description}
+                  className="h-full w-full object-cover"
+                />
+              </div>
+            )}
+            <div className="space-y-2">
+              <Label htmlFor="edit-el-desc">Description</Label>
+              <Textarea
+                id="edit-el-desc"
+                value={editElementDesc}
+                onChange={(e) => setEditElementDesc(e.target.value)}
+                rows={3}
+                autoFocus
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-el-tags">Tags</Label>
+              <Input
+                id="edit-el-tags"
+                placeholder="comma separated, e.g. physics, formula"
+                value={editElementTags}
+                onChange={(e) => setEditElementTags(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">Separate tags with commas</p>
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button variant="outline" onClick={() => { setEditElementOpen(false); setEditingElement(null); }}>
+                Cancel
+              </Button>
+              <Button onClick={handleEditElement} disabled={savingElement} className="gap-2">
+                {savingElement && <Loader2 className="h-4 w-4 animate-spin" />}
+                Save Changes
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Delete Collection Confirmation */}
       <Dialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>

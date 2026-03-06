@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import dbConnect from "@/lib/db";
 import Element from "@/lib/models/element";
 import Collection from "@/lib/models/collection";
+import { getUserFromHeaders } from "@/lib/api-auth";
 
 export async function GET(
   req: NextRequest,
@@ -12,6 +13,18 @@ export async function GET(
     const { id } = await params;
     const { searchParams } = new URL(req.url);
     const tag = searchParams.get("tag");
+    const user = getUserFromHeaders(req);
+
+    // Check collection access
+    const collection = await Collection.findById(id).lean();
+    if (!collection) {
+      return NextResponse.json({ error: "Collection not found" }, { status: 404 });
+    }
+
+    const isOwner = user && collection.userId?.toString() === user.userId;
+    if (!collection.isPublic && !isOwner) {
+      return NextResponse.json({ error: "Collection not found" }, { status: 404 });
+    }
 
     const query: Record<string, unknown> = { collectionId: id };
     if (tag) {
@@ -33,10 +46,14 @@ export async function POST(
   try {
     await dbConnect();
     const { id } = await params;
+    const user = getUserFromHeaders(req);
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
 
-    // Verify collection exists
+    // Verify ownership
     const collection = await Collection.findById(id);
-    if (!collection) {
+    if (!collection || collection.userId.toString() !== user.userId) {
       return NextResponse.json({ error: "Collection not found" }, { status: 404 });
     }
 
@@ -59,7 +76,6 @@ export async function POST(
       tags: (tags || []).map((t: string) => t.trim().toLowerCase()).filter(Boolean),
     });
 
-    // Update element count
     await Collection.findByIdAndUpdate(id, { $inc: { elementCount: 1 } });
 
     return NextResponse.json(element, { status: 201 });
