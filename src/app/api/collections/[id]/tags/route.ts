@@ -13,7 +13,9 @@ export async function GET(
     const { id } = await params;
     const user = getUserFromHeaders(req);
 
-    const collection = await Collection.findById(id);
+    const collection = await Collection.findById(id)
+      .select("userId isPublic")
+      .lean();
     if (!collection) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }

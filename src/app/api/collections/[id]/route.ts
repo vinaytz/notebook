@@ -43,8 +43,8 @@ export async function PATCH(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Verify ownership
-    const existing = await Collection.findById(id);
+    // Verify ownership — only fetch userId field
+    const existing = await Collection.findById(id).select("userId").lean();
     if (!existing || existing.userId.toString() !== user.userId) {
       return NextResponse.json({ error: "Collection not found" }, { status: 404 });
     }
@@ -79,8 +79,8 @@ export async function DELETE(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Verify ownership
-    const existing = await Collection.findById(id);
+    // Verify ownership — only fetch userId field
+    const existing = await Collection.findById(id).select("userId").lean();
     if (!existing || existing.userId.toString() !== user.userId) {
       return NextResponse.json({ error: "Collection not found" }, { status: 404 });
     }

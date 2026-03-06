@@ -18,7 +18,6 @@ const ElementSchema = new Schema<IElement>(
       type: Schema.Types.ObjectId,
       ref: "Collection",
       required: true,
-      index: true,
     },
     imageUrl: { type: String, required: true },
     imageFileId: { type: String, required: true },
@@ -29,7 +28,10 @@ const ElementSchema = new Schema<IElement>(
   { timestamps: true }
 );
 
-ElementSchema.index({ tags: 1 });
+// Compound index for fetching elements of a collection sorted by newest first
+ElementSchema.index({ collectionId: 1, createdAt: -1 });
+// Compound index for tag-filtered queries within a collection
+ElementSchema.index({ collectionId: 1, tags: 1, createdAt: -1 });
 
 const Element: Model<IElement> =
   mongoose.models.Element || mongoose.model<IElement>("Element", ElementSchema);

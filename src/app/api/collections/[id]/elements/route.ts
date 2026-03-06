@@ -15,8 +15,10 @@ export async function GET(
     const tag = searchParams.get("tag");
     const user = getUserFromHeaders(req);
 
-    // Check collection access
-    const collection = await Collection.findById(id).lean();
+    // Check collection access — only fetch needed fields
+    const collection = await Collection.findById(id)
+      .select("userId isPublic")
+      .lean();
     if (!collection) {
       return NextResponse.json({ error: "Collection not found" }, { status: 404 });
     }
@@ -51,8 +53,8 @@ export async function POST(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Verify ownership
-    const collection = await Collection.findById(id);
+    // Verify ownership — only fetch userId field
+    const collection = await Collection.findById(id).select("userId").lean();
     if (!collection || collection.userId.toString() !== user.userId) {
       return NextResponse.json({ error: "Collection not found" }, { status: 404 });
     }
