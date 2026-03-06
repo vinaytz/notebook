@@ -244,6 +244,7 @@ function PublicCollectionDetail({
   const [elements, setElements] = useState<Element[]>([]);
   const [tags, setTags] = useState<string[]>([]);
   const [activeTag, setActiveTag] = useState<string | null>(null);
+  const [tagSearch, setTagSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [lightboxElement, setLightboxElement] = useState<Element | null>(null);
 
@@ -310,34 +311,56 @@ function PublicCollectionDetail({
 
       <Separator />
 
-      {/* Tag Filters */}
+      {/* Tag Filter / Search */}
       {tags.length > 0 && (
-        <div className="flex flex-wrap items-center gap-2">
-          <Filter className="h-4 w-4 text-muted-foreground" />
-          <Badge
-            variant={activeTag === null ? "default" : "outline"}
-            className="cursor-pointer transition-colors"
-            onClick={() => setActiveTag(null)}
-          >
-            All
-          </Badge>
-          {tags.map((tag) => (
+        <div className="space-y-3">
+          <div className="relative max-w-xs">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search tags…"
+              value={tagSearch}
+              onChange={(e) => setTagSearch(e.target.value)}
+              className="pl-9 h-9 text-sm"
+            />
+            {tagSearch && (
+              <button
+                type="button"
+                className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded-md text-muted-foreground hover:text-foreground"
+                onClick={() => setTagSearch("")}
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Filter className="h-4 w-4 text-muted-foreground" />
             <Badge
-              key={tag}
-              variant={activeTag === tag ? "default" : "outline"}
+              variant={activeTag === null ? "default" : "outline"}
               className="cursor-pointer transition-colors"
-              onClick={() => setActiveTag(activeTag === tag ? null : tag)}
+              onClick={() => { setActiveTag(null); setTagSearch(""); }}
             >
-              {tag}
-              {activeTag === tag && <X className="ml-1 h-3 w-3" />}
+              All
             </Badge>
-          ))}
+            {tags
+              .filter((tag) => tag.toLowerCase().includes(tagSearch.toLowerCase()))
+              .map((tag) => (
+                <Badge
+                  key={tag}
+                  variant={activeTag === tag ? "default" : "outline"}
+                  className="cursor-pointer transition-colors"
+                  onClick={() => setActiveTag(activeTag === tag ? null : tag)}
+                >
+                  {tag}
+                  {activeTag === tag && <X className="ml-1 h-3 w-3" />}
+                </Badge>
+              ))}
+          </div>
         </div>
       )}
 
       {/* Elements Grid */}
       {loading ? (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-3 xl:grid-cols-4">
           {Array.from({ length: 8 }).map((_, i) => (
             <div key={i} className="space-y-3">
               <Skeleton className="aspect-square w-full rounded-xl" />
@@ -356,7 +379,7 @@ function PublicCollectionDetail({
           </p>
         </div>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-3 xl:grid-cols-4">
           {elements.map((element) => (
             <Card
               key={element._id}
