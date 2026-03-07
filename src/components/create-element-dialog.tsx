@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { Upload, Loader2, X, Crop, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -40,6 +40,7 @@ export function CreateElementDialog({
   const [tagInput, setTagInput] = useState("");
   const [tags, setTags] = useState<string[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [isDragOver, setIsDragOver] = useState(false);
   const cropperRef = useRef<ReactCropperElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -54,16 +55,13 @@ export function CreateElementDialog({
     setTags([]);
   }, []);
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selectedFile = e.target.files?.[0];
-    if (!selectedFile) return;
-
-    if (!selectedFile.type.startsWith("image/")) {
+  const loadImageFile = useCallback((imageFile: File) => {
+    if (!imageFile.type.startsWith("image/")) {
       toast.error("Please select an image file");
       return;
     }
 
-    setFile(selectedFile);
+    setFile(imageFile);
     setCroppedBlob(null);
     setCroppedPreview(null);
 
@@ -72,8 +70,67 @@ export function CreateElementDialog({
       setPreviewUrl(reader.result as string);
       setIsCropping(true);
     };
-    reader.readAsDataURL(selectedFile);
+    reader.readAsDataURL(imageFile);
+  }, []);
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFile = e.target.files?.[0];
+    if (!selectedFile) return;
+    loadImageFile(selectedFile);
   };
+
+  // Clipboard paste support
+  useEffect(() => {
+    if (!open || previewUrl) return;
+
+    const handlePaste = (e: ClipboardEvent) => {
+      const items = e.clipboardData?.items;
+      if (!items) return;
+
+      for (const item of Array.from(items)) {
+        if (item.type.startsWith("image/")) {
+          e.preventDefault();
+          const pastedFile = item.getAsFile();
+          if (pastedFile) {
+            const namedFile = new File(
+              [pastedFile],
+              `pasted_${Date.now()}.${pastedFile.type.split("/")[1] || "png"}`,
+              { type: pastedFile.type }
+            );
+            loadImageFile(namedFile);
+          }
+          break;
+        }
+      }
+    };
+
+    document.addEventListener("paste", handlePaste);
+    return () => document.removeEventListener("paste", handlePaste);
+  }, [open, previewUrl, loadImageFile]);
+
+  // Drag and drop handlers
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(true);
+  }, []);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(false);
+  }, []);
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(false);
+
+    const droppedFile = e.dataTransfer.files?.[0];
+    if (droppedFile) {
+      loadImageFile(droppedFile);
+    }
+  }, [loadImageFile]);
 
   const handleCrop = () => {
     const cropper = cropperRef.current?.cropper;
@@ -203,18 +260,25 @@ export function CreateElementDialog({
         </DialogHeader>
 
         <div className="space-y-5 pt-2">
-          {/* Image Upload / Crop Area */}
+          {/* Image Upload / Paste / Drop Area */}
           {!previewUrl ? (
             <div
-              className="cursor-pointer rounded-xl border-2 border-dashed border-border/60 bg-muted/30 p-8 text-center transition-colors hover:border-foreground/30 hover:bg-muted/50"
+              className={`cursor-pointer rounded-xl border-2 border-dashed p-8 text-center transition-colors ${
+                isDragOver
+                  ? "border-primary bg-primary/10"
+                  : "border-border/60 bg-muted/30 hover:border-foreground/30 hover:bg-muted/50"
+              }`}
               onClick={() => fileInputRef.current?.click()}
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
             >
-              <Upload className="mx-auto h-8 w-8 text-muted-foreground" />
+              <Upload className={`mx-auto h-8 w-8 ${isDragOver ? "text-primary" : "text-muted-foreground"}`} />
               <p className="mt-3 text-sm font-medium">
-                Click to upload an image
+                {isDragOver ? "Drop image here" : "Click, paste, or drag an image"}
               </p>
               <p className="mt-1 text-xs text-muted-foreground">
-                PNG, JPG, WebP up to 10MB
+                PNG, JPG, WebP up to 10MB &middot; <kbd className="rounded border border-border/80 bg-muted px-1 py-0.5 text-[10px] font-mono">Ctrl+V</kbd> to paste
               </p>
               <input
                 ref={fileInputRef}
