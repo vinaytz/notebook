@@ -22,7 +22,7 @@ const ElementSchema = new Schema<IElement>(
     imageUrl: { type: String, required: true },
     imageFileId: { type: String, required: true },
     thumbnailUrl: { type: String, default: "" },
-    description: { type: String, required: true, trim: true },
+    description: { type: String, required: true },
     tags: [{ type: String, trim: true, lowercase: true }],
   },
   { timestamps: true }

@@ -59,7 +59,7 @@ export function ImageLightbox({ element, onClose }: ImageLightboxProps) {
 
         {/* Info */}
         <div className="p-5">
-          <p className="text-sm font-medium leading-relaxed">
+          <p className="whitespace-pre-wrap text-sm font-medium leading-relaxed">
             {element.description}
           </p>
           {element.tags.length > 0 && (

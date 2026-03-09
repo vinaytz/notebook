@@ -232,7 +232,7 @@ export function CollectionDetail({
         {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ description: editElementDesc.trim(), tags }),
+          body: JSON.stringify({ description: editElementDesc, tags }),
         }
       );
       if (!res.ok) throw new Error("Failed to update");
@@ -425,7 +425,7 @@ export function CollectionDetail({
               <div className="p-4 pt-0 pb-3 md:pb-4 flex justify-between items-center">
                 <div>
 
-                <p className="line-clamp-2 text-sm font-medium leading-snug">
+                <p className="line-clamp-2 whitespace-pre-wrap text-sm font-medium leading-snug">
                   {element.description}
                 </p>
                 {element.tags.length > 0 && (

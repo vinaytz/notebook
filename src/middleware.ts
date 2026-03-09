@@ -17,6 +17,23 @@ export async function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
+  // Allow GET requests to collection APIs (route handlers check public access)
+  if (req.method === "GET" && pathname.startsWith("/api/collections/")) {
+    // Still attach user info if token is present
+    const token = req.cookies.get("collectr_token")?.value;
+    if (token) {
+      const payload = await verifyToken(token);
+      if (payload) {
+        const requestHeaders = new Headers(req.headers);
+        requestHeaders.set("x-user-id", payload.userId);
+        requestHeaders.set("x-user-email", payload.email);
+        requestHeaders.set("x-user-name", payload.name);
+        return NextResponse.next({ request: { headers: requestHeaders } });
+      }
+    }
+    return NextResponse.next();
+  }
+
   // Allow static files and _next
   if (
     pathname.startsWith("/_next") ||

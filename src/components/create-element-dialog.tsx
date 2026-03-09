@@ -225,7 +225,7 @@ export function CreateElementDialog({
           imageUrl: uploadData.url,
           imageFileId: uploadData.fileId,
           thumbnailUrl: uploadData.thumbnailUrl || uploadData.url,
-          description: description.trim(),
+          description: description,
           tags,
         }),
       });
