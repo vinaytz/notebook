@@ -1,13 +1,21 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import dbConnect from "@/lib/db";
 import Collection from "@/lib/models/collection";
 import User from "@/lib/models/user";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
     await dbConnect();
 
-    const collections = await Collection.find({ isPublic: true })
+    const parentId = req.nextUrl.searchParams.get("parentId");
+    const query: Record<string, unknown> = { isPublic: true };
+    if (parentId) {
+      query.parentId = parentId;
+    } else {
+      query.parentId = null;
+    }
+
+    const collections = await Collection.find(query)
       .sort({ createdAt: -1 })
       .lean();
 

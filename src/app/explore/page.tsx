@@ -11,7 +11,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import { formatDistanceToNow } from "date-fns";
 import { ImageLightbox } from "@/components/image-lightbox";
-import { Filter, X, ImageIcon } from "lucide-react";
+import { Filter, X, ImageIcon, ChevronRight } from "lucide-react";
 import Link from "next/link";
 import { useAuth } from "@/components/auth-provider";
 import { AppHeader } from "@/components/app-header";
@@ -22,6 +22,8 @@ interface Collection {
   description: string;
   isPublic: boolean;
   elementCount: number;
+  subCollectionCount: number;
+  parentId: string | null;
   ownerName: string;
   createdAt: string;
 }
@@ -39,7 +41,8 @@ export default function ExplorePage() {
   const [collections, setCollections] = useState<Collection[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedCollection, setSelectedCollection] = useState<Collection | null>(null);
+  const [collectionPath, setCollectionPath] = useState<Collection[]>([]);
+  const selectedCollection = collectionPath.length > 0 ? collectionPath[collectionPath.length - 1] : null;
 
   const fetchPublicCollections = useCallback(async () => {
     try {
@@ -71,8 +74,18 @@ export default function ExplorePage() {
         <ExploreHeader />
         <main className="mx-auto max-w-7xl px-6 py-8">
           <PublicCollectionDetail
+            key={selectedCollection._id}
             collection={selectedCollection}
-            onBack={() => setSelectedCollection(null)}
+            breadcrumbs={collectionPath}
+            onBack={() => {
+              if (collectionPath.length > 1) {
+                setCollectionPath((prev) => prev.slice(0, -1));
+              } else {
+                setCollectionPath([]);
+              }
+            }}
+            onNavigateInto={(sub) => setCollectionPath((prev) => [...prev, sub])}
+            onNavigateTo={(index) => setCollectionPath((prev) => prev.slice(0, index + 1))}
           />
         </main>
       </div>
@@ -141,7 +154,7 @@ export default function ExplorePage() {
                 <Card
                   key={collection._id}
                   className="group cursor-pointer transition-all duration-200 hover:border-foreground/20 hover:shadow-lg hover:shadow-foreground/5"
-                  onClick={() => setSelectedCollection(collection)}
+                  onClick={() => setCollectionPath([collection])}
                 >
                   <CardContent className="p-5">
                     <div className="flex items-start justify-between">
@@ -167,6 +180,12 @@ export default function ExplorePage() {
                       <span>by {collection.ownerName}</span>
                       <span className="text-border">·</span>
                       <span>{collection.elementCount} items</span>
+                      {(collection.subCollectionCount || 0) > 0 && (
+                        <>
+                          <span className="text-border">·</span>
+                          <span>{collection.subCollectionCount} sub-collections</span>
+                        </>
+                      )}
                       <span className="text-border">·</span>
                       <span>
                         {formatDistanceToNow(new Date(collection.createdAt), {
@@ -236,10 +255,16 @@ function ExploreHeader() {
 
 function PublicCollectionDetail({
   collection,
+  breadcrumbs,
   onBack,
+  onNavigateInto,
+  onNavigateTo,
 }: {
   collection: Collection;
+  breadcrumbs: Collection[];
   onBack: () => void;
+  onNavigateInto: (sub: Collection) => void;
+  onNavigateTo: (index: number) => void;
 }) {
   const [elements, setElements] = useState<Element[]>([]);
   const [tags, setTags] = useState<string[]>([]);
@@ -247,6 +272,8 @@ function PublicCollectionDetail({
   const [tagSearch, setTagSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [lightboxElement, setLightboxElement] = useState<Element | null>(null);
+  const [subCollections, setSubCollections] = useState<Collection[]>([]);
+  const [loadingSubCollections, setLoadingSubCollections] = useState(true);
 
   const fetchElements = useCallback(async () => {
     try {
@@ -284,8 +311,45 @@ function PublicCollectionDetail({
     fetchTags();
   }, [fetchTags]);
 
+  const fetchSubCollections = useCallback(async () => {
+    setLoadingSubCollections(true);
+    try {
+      const res = await fetch(`/api/public/collections?parentId=${collection._id}`);
+      if (!res.ok) throw new Error("Failed to fetch");
+      const data = await res.json();
+      setSubCollections(data);
+    } catch {
+      // Non-critical
+    } finally {
+      setLoadingSubCollections(false);
+    }
+  }, [collection._id]);
+
+  useEffect(() => {
+    fetchSubCollections();
+  }, [fetchSubCollections]);
+
   return (
     <div className="space-y-6">
+      {/* Breadcrumbs */}
+      {breadcrumbs.length > 1 && (
+        <nav className="flex items-center gap-1 text-sm overflow-x-auto pb-1">
+          {breadcrumbs.slice(0, -1).map((bc, i) => (
+            <span key={bc._id} className="flex items-center gap-1 shrink-0">
+              {i > 0 && <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />}
+              <button
+                className="text-muted-foreground hover:text-foreground transition-colors truncate max-w-[150px]"
+                onClick={() => onNavigateTo(i)}
+              >
+                {bc.name}
+              </button>
+            </span>
+          ))}
+          <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+          <span className="font-medium text-foreground truncate">{collection.name}</span>
+        </nav>
+      )}
+
       <div className="flex items-center gap-4">
         <Button variant="ghost" size="icon" onClick={onBack} className="shrink-0">
           <ArrowLeft className="h-4 w-4" />
@@ -310,6 +374,44 @@ function PublicCollectionDetail({
       </div>
 
       <Separator />
+
+      {/* Sub-Collections */}
+      {!loadingSubCollections && subCollections.length > 0 && (
+        <div className="space-y-3">
+          <h3 className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+            <FolderOpen className="h-4 w-4" />
+            Sub-Collections ({subCollections.length})
+          </h3>
+          <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4">
+            {subCollections.map((sub) => (
+              <button
+                key={sub._id}
+                className="group flex flex-col gap-2 rounded-xl border border-border/60 p-4 text-left transition-all hover:border-foreground/20 hover:shadow-md hover:shadow-foreground/5"
+                onClick={() => onNavigateInto(sub)}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-muted">
+                    <FolderOpen className="h-4 w-4 text-muted-foreground transition-colors group-hover:text-foreground" />
+                  </div>
+                  <Badge variant="secondary" className="text-[10px]">
+                    <Globe className="mr-1 h-2.5 w-2.5" />
+                    Public
+                  </Badge>
+                </div>
+                <div>
+                  <p className="font-semibold text-sm truncate group-hover:text-foreground transition-colors">
+                    {sub.name}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {sub.elementCount || 0} items
+                    {(sub.subCollectionCount || 0) > 0 && ` · ${sub.subCollectionCount} folders`}
+                  </p>
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Tag Filter / Search */}
       {tags.length > 0 && (
@@ -385,22 +487,33 @@ function PublicCollectionDetail({
               key={element._id}
               className="group overflow-hidden transition-all duration-200 hover:border-foreground/20 hover:shadow-lg hover:shadow-foreground/5"
             >
-              <div
-                className="relative aspect-square cursor-pointer overflow-hidden bg-muted"
-                onClick={() => setLightboxElement(element)}
-              >
-                <img
-                  src={element.thumbnailUrl || element.imageUrl}
-                  alt={element.description}
-                  className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
-                  loading="lazy"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
-              </div>
+              {(element.thumbnailUrl || element.imageUrl) ? (
+                <div
+                  className="relative aspect-square cursor-pointer overflow-hidden bg-muted"
+                  onClick={() => setLightboxElement(element)}
+                >
+                  <img
+                    src={element.thumbnailUrl || element.imageUrl}
+                    alt={element.description || "Element"}
+                    className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                    loading="lazy"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
+                </div>
+              ) : (
+                <div
+                  className="flex aspect-square cursor-pointer items-center justify-center bg-muted"
+                  onClick={() => setLightboxElement(element)}
+                >
+                  <ImageIcon className="h-8 w-8 text-muted-foreground/40" />
+                </div>
+              )}
               <div className="p-4">
-                <p className="line-clamp-2 whitespace-pre-wrap text-sm font-medium leading-snug">
-                  {element.description}
-                </p>
+                {element.description ? (
+                  <p className="line-clamp-2 whitespace-pre-wrap text-sm font-medium leading-snug">{element.description}</p>
+                ) : (
+                  <p className="text-sm text-muted-foreground italic">No description</p>
+                )}
                 {element.tags.length > 0 && (
                   <div className="mt-3 flex flex-wrap gap-1.5">
                     {element.tags.map((tag) => (

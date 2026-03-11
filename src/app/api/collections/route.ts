@@ -11,7 +11,15 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const collections = await Collection.find({ userId: user.userId })
+    const parentId = req.nextUrl.searchParams.get("parentId");
+    const query: Record<string, unknown> = { userId: user.userId };
+    if (parentId) {
+      query.parentId = parentId;
+    } else {
+      query.parentId = null;
+    }
+
+    const collections = await Collection.find(query)
       .sort({ createdAt: -1 })
       .lean();
 
@@ -31,18 +39,32 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { name, description, isPublic } = body;
+    const { name, description, isPublic, parentId } = body;
 
     if (!name || !name.trim()) {
       return NextResponse.json({ error: "Collection name is required" }, { status: 400 });
     }
 
+    // If creating a sub-collection, verify parent ownership
+    if (parentId) {
+      const parent = await Collection.findById(parentId).select("userId").lean();
+      if (!parent || parent.userId.toString() !== user.userId) {
+        return NextResponse.json({ error: "Parent collection not found" }, { status: 404 });
+      }
+    }
+
     const collection = await Collection.create({
       userId: user.userId,
+      parentId: parentId || null,
       name: name.trim(),
       description: description?.trim() || "",
       isPublic: isPublic || false,
     });
+
+    // Update parent sub-collection count
+    if (parentId) {
+      await Collection.findByIdAndUpdate(parentId, { $inc: { subCollectionCount: 1 } });
+    }
 
     return NextResponse.json(collection, { status: 201 });
   } catch (error) {

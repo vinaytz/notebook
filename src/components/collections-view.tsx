@@ -26,6 +26,8 @@ interface Collection {
   description: string;
   isPublic: boolean;
   elementCount: number;
+  subCollectionCount: number;
+  parentId: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -39,7 +41,8 @@ export function CollectionsView() {
   const [newName, setNewName] = useState("");
   const [newDesc, setNewDesc] = useState("");
   const [newIsPublic, setNewIsPublic] = useState(false);
-  const [selectedCollection, setSelectedCollection] = useState<Collection | null>(null);
+  const [collectionPath, setCollectionPath] = useState<Collection[]>([]);
+  const selectedCollection = collectionPath.length > 0 ? collectionPath[collectionPath.length - 1] : null;
 
   const fetchCollections = useCallback(async () => {
     try {
@@ -106,15 +109,27 @@ export function CollectionsView() {
   if (selectedCollection) {
     return (
       <CollectionDetail
+        key={selectedCollection._id}
         collection={selectedCollection}
+        breadcrumbs={collectionPath}
         onBack={() => {
-          setSelectedCollection(null);
-          fetchCollections();
+          if (collectionPath.length > 1) {
+            setCollectionPath((prev) => prev.slice(0, -1));
+          } else {
+            setCollectionPath([]);
+            fetchCollections();
+          }
         }}
         onDelete={() => {
           handleDelete(selectedCollection._id);
-          setSelectedCollection(null);
+          if (collectionPath.length > 1) {
+            setCollectionPath((prev) => prev.slice(0, -1));
+          } else {
+            setCollectionPath([]);
+          }
         }}
+        onNavigateInto={(sub) => setCollectionPath((prev) => [...prev, sub])}
+        onNavigateTo={(index) => setCollectionPath((prev) => prev.slice(0, index + 1))}
       />
     );
   }
@@ -185,7 +200,7 @@ export function CollectionsView() {
             <Card
               key={collection._id}
               className="group cursor-pointer transition-all duration-200 hover:border-foreground/20 hover:shadow-lg hover:shadow-foreground/5"
-              onClick={() => setSelectedCollection(collection)}
+              onClick={() => setCollectionPath([collection])}
             >
               <CardContent className="p-5">
                 <div className="flex items-start justify-between">
@@ -212,6 +227,12 @@ export function CollectionsView() {
                 </div>
                 <div className="mt-4 flex items-center gap-3 text-xs text-muted-foreground">
                   <span>{collection.elementCount} items</span>
+                  {(collection.subCollectionCount || 0) > 0 && (
+                    <>
+                      <span className="text-border">·</span>
+                      <span>{collection.subCollectionCount} sub-collections</span>
+                    </>
+                  )}
                   <span className="text-border">·</span>
                   <span>
                     {formatDistanceToNow(new Date(collection.createdAt), {

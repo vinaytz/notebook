@@ -79,14 +79,28 @@ export async function DELETE(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Verify ownership — only fetch userId field
-    const existing = await Collection.findById(id).select("userId").lean();
+    // Verify ownership — only fetch userId and parentId fields
+    const existing = await Collection.findById(id).select("userId parentId").lean();
     if (!existing || existing.userId.toString() !== user.userId) {
       return NextResponse.json({ error: "Collection not found" }, { status: 404 });
     }
 
-    await Element.deleteMany({ collectionId: id });
-    await Collection.findByIdAndDelete(id);
+    // Recursively delete all sub-collections and their elements
+    async function deleteRecursive(collectionId: string) {
+      const children = await Collection.find({ parentId: collectionId }).select("_id").lean();
+      for (const child of children) {
+        await deleteRecursive(child._id.toString());
+      }
+      await Element.deleteMany({ collectionId });
+      await Collection.findByIdAndDelete(collectionId);
+    }
+
+    await deleteRecursive(id);
+
+    // Update parent's sub-collection count
+    if (existing.parentId) {
+      await Collection.findByIdAndUpdate(existing.parentId, { $inc: { subCollectionCount: -1 } });
+    }
 
     return NextResponse.json({ message: "Collection deleted successfully" });
   } catch (error) {

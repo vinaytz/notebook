@@ -13,6 +13,9 @@ import {
   Lock,
   Pencil,
   Search,
+  FolderOpen,
+  ChevronRight,
+  FolderPlus,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -46,7 +49,10 @@ interface Collection {
   description: string;
   isPublic: boolean;
   elementCount: number;
+  subCollectionCount: number;
+  parentId: string | null;
   createdAt: string;
+  updatedAt: string;
 }
 
 interface Element {
@@ -60,14 +66,20 @@ interface Element {
 
 interface CollectionDetailProps {
   collection: Collection;
+  breadcrumbs: Collection[];
   onBack: () => void;
   onDelete: () => void;
+  onNavigateInto: (collection: Collection) => void;
+  onNavigateTo: (index: number) => void;
 }
 
 export function CollectionDetail({
   collection,
+  breadcrumbs,
   onBack,
   onDelete,
+  onNavigateInto,
+  onNavigateTo,
 }: CollectionDetailProps) {
   const [elements, setElements] = useState<Element[]>([]);
   const [tags, setTags] = useState<string[]>([]);
@@ -101,6 +113,17 @@ export function CollectionDetail({
   const [displayName, setDisplayName] = useState(collection.name);
   const [displayDesc, setDisplayDesc] = useState(collection.description || "");
 
+  // Sub-collections
+  const [subCollections, setSubCollections] = useState<Collection[]>([]);
+  const [loadingSubCollections, setLoadingSubCollections] = useState(true);
+
+  // Create sub-collection
+  const [createSubOpen, setCreateSubOpen] = useState(false);
+  const [creatingSub, setCreatingSub] = useState(false);
+  const [subName, setSubName] = useState("");
+  const [subDesc, setSubDesc] = useState("");
+  const [subIsPublic, setSubIsPublic] = useState(collection.isPublic ?? false);
+
   const fetchElements = useCallback(async () => {
     try {
       const url = activeTag
@@ -128,6 +151,20 @@ export function CollectionDetail({
     }
   }, [collection._id]);
 
+  const fetchSubCollections = useCallback(async () => {
+    setLoadingSubCollections(true);
+    try {
+      const res = await fetch(`/api/collections?parentId=${collection._id}`);
+      if (!res.ok) throw new Error("Failed to fetch");
+      const data = await res.json();
+      setSubCollections(data);
+    } catch {
+      // Non-critical
+    } finally {
+      setLoadingSubCollections(false);
+    }
+  }, [collection._id]);
+
   useEffect(() => {
     setLoading(true);
     fetchElements();
@@ -136,6 +173,10 @@ export function CollectionDetail({
   useEffect(() => {
     fetchTags();
   }, [fetchTags]);
+
+  useEffect(() => {
+    fetchSubCollections();
+  }, [fetchSubCollections]);
 
   const handleElementCreated = () => {
     fetchElements();
@@ -217,10 +258,6 @@ export function CollectionDetail({
 
   const handleEditElement = async () => {
     if (!editingElement) return;
-    if (!editElementDesc.trim()) {
-      toast.error("Description is required");
-      return;
-    }
     setSavingElement(true);
     try {
       const tags = editElementTags
@@ -249,8 +286,59 @@ export function CollectionDetail({
     }
   };
 
+  const handleCreateSubCollection = async () => {
+    if (!subName.trim()) {
+      toast.error("Please enter a name");
+      return;
+    }
+    setCreatingSub(true);
+    try {
+      const res = await fetch("/api/collections", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: subName,
+          description: subDesc,
+          isPublic: subIsPublic,
+          parentId: collection._id,
+        }),
+      });
+      if (!res.ok) throw new Error("Failed to create");
+      const created = await res.json();
+      setSubCollections((prev) => [created, ...prev]);
+      setCreateSubOpen(false);
+      setSubName("");
+      setSubDesc("");
+      setSubIsPublic(collection.isPublic ?? false);
+      toast.success("Sub-collection created");
+    } catch {
+      toast.error("Failed to create sub-collection");
+    } finally {
+      setCreatingSub(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
+      {/* Breadcrumbs */}
+      {breadcrumbs.length > 1 && (
+        <nav className="flex items-center gap-1 text-sm overflow-x-auto pb-1">
+          {breadcrumbs.slice(0, -1).map((bc, i) => (
+            <span key={bc._id} className="flex items-center gap-1 shrink-0">
+              {i > 0 && <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />}
+              <button
+                className="text-muted-foreground hover:text-foreground transition-colors truncate max-w-[150px]"
+                onClick={() => onNavigateTo(i)}
+              >
+                {bc.name}
+              </button>
+            </span>
+          ))}
+          <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+          <span className="font-medium text-foreground truncate">{displayName}</span>
+        </nav>
+      )}
+
       {/* Navigation & Header */}
       <div className="flex flex-col gap-4">
         <div className="flex items-center gap-4">
@@ -288,6 +376,10 @@ export function CollectionDetail({
               <Plus className="h-4 w-4" />
               <span className="hidden sm:inline">Add Element</span>
             </Button>
+            <Button variant="outline" onClick={() => setCreateSubOpen(true)} className="gap-2">
+              <FolderPlus className="h-4 w-4" />
+              <span className="hidden sm:inline">Sub-Collection</span>
+            </Button>
             <Button
               variant="outline"
               size="icon"
@@ -313,6 +405,44 @@ export function CollectionDetail({
       </div>
 
       <Separator />
+
+      {/* Sub-Collections */}
+      {!loadingSubCollections && subCollections.length > 0 && (
+        <div className="space-y-3">
+          <h3 className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+            <FolderOpen className="h-4 w-4" />
+            Sub-Collections ({subCollections.length})
+          </h3>
+          <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4">
+            {subCollections.map((sub) => (
+              <button
+                key={sub._id}
+                className="group flex flex-col gap-2 rounded-xl border border-border/60 p-4 text-left transition-all hover:border-foreground/20 hover:shadow-md hover:shadow-foreground/5"
+                onClick={() => onNavigateInto(sub)}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-muted">
+                    <FolderOpen className="h-4 w-4 text-muted-foreground transition-colors group-hover:text-foreground" />
+                  </div>
+                  <Badge variant="secondary" className="text-[10px]">
+                    {sub.isPublic ? <Globe className="mr-1 h-2.5 w-2.5" /> : <Lock className="mr-1 h-2.5 w-2.5" />}
+                    {sub.isPublic ? "Public" : "Private"}
+                  </Badge>
+                </div>
+                <div>
+                  <p className="font-semibold text-sm truncate group-hover:text-foreground transition-colors">
+                    {sub.name}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {sub.elementCount || 0} items
+                    {(sub.subCollectionCount || 0) > 0 && ` · ${sub.subCollectionCount} folders`}
+                  </p>
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Tag Filter / Search */}
       {tags.length > 0 && (
@@ -408,26 +538,37 @@ export function CollectionDetail({
               className="group pb-0 overflow-hidden transition-all duration-200 hover:border-foreground/20 hover:shadow-lg hover:shadow-foreground/5"
             >
               {/* Image */}
-              <div
-                className="relative aspect-square cursor-pointer overflow-hidden bg-muted"
-                onClick={() => setLightboxElement(element)}
-              >
-                <img
-                  src={element.thumbnailUrl || element.imageUrl}
-                  alt={element.description}
-                  className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
-                  loading="lazy"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
-              </div>
+              {(element.thumbnailUrl || element.imageUrl) ? (
+                <div
+                  className="relative aspect-square cursor-pointer overflow-hidden bg-muted"
+                  onClick={() => setLightboxElement(element)}
+                >
+                  <img
+                    src={element.thumbnailUrl || element.imageUrl}
+                    alt={element.description || "Element"}
+                    className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                    loading="lazy"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
+                </div>
+              ) : (
+                <div
+                  className="flex aspect-square cursor-pointer items-center justify-center bg-muted"
+                  onClick={() => setLightboxElement(element)}
+                >
+                  <ImageIcon className="h-8 w-8 text-muted-foreground/40" />
+                </div>
+              )}
 
               {/* Content */}
               <div className="p-4 pt-0 pb-3 md:pb-4 flex justify-between items-center">
                 <div>
 
-                <p className="line-clamp-2 whitespace-pre-wrap text-sm font-medium leading-snug">
-                  {element.description}
-                </p>
+                {element.description ? (
+                  <p className="line-clamp-2 whitespace-pre-wrap text-sm font-medium leading-snug">{element.description}</p>
+                ) : (
+                  <p className="text-sm text-muted-foreground italic">No description</p>
+                )}
                 {element.tags.length > 0 && (
                   <div className="mt-3 flex flex-wrap gap-1.5">
                     {element.tags.map((tag) => (
@@ -603,8 +744,8 @@ export function CollectionDetail({
           <DialogHeader>
             <DialogTitle>Delete Collection</DialogTitle>
             <DialogDescription>
-              This will permanently delete &ldquo;{collection.name}&rdquo; and all its
-              elements. This action cannot be undone.
+              This will permanently delete &ldquo;{displayName}&rdquo; and all its
+              elements and sub-collections. This action cannot be undone.
             </DialogDescription>
           </DialogHeader>
           <div className="flex justify-end gap-2 pt-4">
@@ -620,6 +761,61 @@ export function CollectionDetail({
               {deleting && <Loader2 className="h-4 w-4 animate-spin" />}
               Delete
             </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Create Sub-Collection Dialog */}
+      <Dialog open={createSubOpen} onOpenChange={setCreateSubOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Create Sub-Collection</DialogTitle>
+            <DialogDescription>
+              Create a new collection inside &ldquo;{displayName}&rdquo;.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 pt-2">
+            <div className="space-y-2">
+              <Label htmlFor="sub-name">Name</Label>
+              <Input
+                id="sub-name"
+                placeholder="e.g. Chapter 1, Reference Images..."
+                value={subName}
+                onChange={(e) => setSubName(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleCreateSubCollection()}
+                autoFocus
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="sub-desc">Description (optional)</Label>
+              <Textarea
+                id="sub-desc"
+                placeholder="What will this sub-collection contain?"
+                value={subDesc}
+                onChange={(e) => setSubDesc(e.target.value)}
+                rows={3}
+              />
+            </div>
+            <div className="flex items-center justify-between rounded-lg border p-3">
+              <div className="space-y-0.5">
+                <Label htmlFor="sub-public" className="text-sm font-medium">Public</Label>
+                <p className="text-xs text-muted-foreground">Anyone can view this sub-collection</p>
+              </div>
+              <Switch
+                id="sub-public"
+                checked={subIsPublic}
+                onCheckedChange={setSubIsPublic}
+              />
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button variant="outline" onClick={() => setCreateSubOpen(false)}>
+                Cancel
+              </Button>
+              <Button onClick={handleCreateSubCollection} disabled={creatingSub} className="gap-2">
+                {creatingSub && <Loader2 className="h-4 w-4 animate-spin" />}
+                Create
+              </Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>

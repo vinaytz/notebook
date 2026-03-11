@@ -62,19 +62,21 @@ export async function POST(
     const body = await req.json();
     const { imageUrl, imageFileId, thumbnailUrl, description, tags } = body;
 
-    if (!imageUrl || !description) {
+    // At least one of image, description, or tags must be provided
+    const hasTags = Array.isArray(tags) && tags.filter(Boolean).length > 0;
+    if (!imageUrl && !description && !hasTags) {
       return NextResponse.json(
-        { error: "Image URL and description are required" },
+        { error: "At least an image, description, or tags are required" },
         { status: 400 }
       );
     }
 
     const element = await Element.create({
       collectionId: id,
-      imageUrl,
+      imageUrl: imageUrl || "",
       imageFileId: imageFileId || "",
-      thumbnailUrl: thumbnailUrl || imageUrl,
-      description: description.trim(),
+      thumbnailUrl: thumbnailUrl || imageUrl || "",
+      description: description || "",
       tags: (tags || []).map((t: string) => t.trim().toLowerCase()).filter(Boolean),
     });
 

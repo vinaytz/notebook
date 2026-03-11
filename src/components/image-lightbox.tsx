@@ -49,19 +49,23 @@ export function ImageLightbox({ element, onClose }: ImageLightboxProps) {
         </button>
 
         {/* Image */}
-        <div className="flex items-center justify-center bg-black/20">
-          <img
-            src={element.imageUrl}
-            alt={element.description}
-            className="max-h-[70vh] w-full object-contain"
-          />
-        </div>
+        {(element.imageUrl) && (
+          <div className="flex items-center justify-center bg-black/20">
+            <img
+              src={element.imageUrl}
+              alt={element.description || "Element"}
+              className="max-h-[70vh] w-full object-contain"
+            />
+          </div>
+        )}
 
         {/* Info */}
         <div className="p-5">
-          <p className="whitespace-pre-wrap text-sm font-medium leading-relaxed">
-            {element.description}
-          </p>
+          {element.description ? (
+            <p className="whitespace-pre-wrap text-sm font-medium leading-relaxed">{element.description}</p>
+          ) : (
+            <p className="text-sm text-muted-foreground italic">No description</p>
+          )}
           {element.tags.length > 0 && (
             <div className="mt-3 flex flex-wrap gap-1.5">
               {element.tags.map((tag) => (

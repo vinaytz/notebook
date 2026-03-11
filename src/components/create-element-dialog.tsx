@@ -176,55 +176,62 @@ export function CreateElementDialog({
     setTags((prev) => prev.filter((t) => t !== tagToRemove));
   };
 
+  const hasImage = !!(file || croppedBlob);
+  const hasContent = hasImage || !!description.trim() || tags.length > 0;
+
   const handleUpload = async () => {
-    if (!file && !croppedBlob) {
-      toast.error("Please select an image");
-      return;
-    }
-    if (!description.trim()) {
-      toast.error("Please add a description");
+    if (!hasContent) {
+      toast.error("Add an image, description, or at least one tag");
       return;
     }
 
     setUploading(true);
 
     try {
-      // 1. Get ImageKit auth params
-      const authRes = await fetch("/api/imagekit-auth");
-      if (!authRes.ok) throw new Error("Failed to get upload credentials");
-      const authData = await authRes.json();
+      let imageUrl = "";
+      let imageFileId = "";
+      let thumbnailUrl = "";
 
-      // 2. Upload to ImageKit
-      const uploadBlob = croppedBlob || file!;
-      const formData = new FormData();
-      formData.append("file", uploadBlob, file?.name || "image.jpg");
-      formData.append("publicKey", process.env.NEXT_PUBLIC_IMAGEKIT_PUBLIC_KEY || authData.publicKey || "");
-      formData.append("signature", authData.signature);
-      formData.append("expire", authData.expire.toString());
-      formData.append("token", authData.token);
-      formData.append("fileName", `collectr_${Date.now()}_${file?.name || "image.jpg"}`);
-      formData.append("folder", `/collectr/${collectionId}`);
+      // Upload image to ImageKit only if an image was provided
+      if (hasImage) {
+        const authRes = await fetch("/api/imagekit-auth");
+        if (!authRes.ok) throw new Error("Failed to get upload credentials");
+        const authData = await authRes.json();
 
-      const uploadRes = await fetch("https://upload.imagekit.io/api/v1/files/upload", {
-        method: "POST",
-        body: formData,
-      });
+        const uploadBlob = croppedBlob || file!;
+        const formData = new FormData();
+        formData.append("file", uploadBlob, file?.name || "image.jpg");
+        formData.append("publicKey", process.env.NEXT_PUBLIC_IMAGEKIT_PUBLIC_KEY || authData.publicKey || "");
+        formData.append("signature", authData.signature);
+        formData.append("expire", authData.expire.toString());
+        formData.append("token", authData.token);
+        formData.append("fileName", `collectr_${Date.now()}_${file?.name || "image.jpg"}`);
+        formData.append("folder", `/collectr/${collectionId}`);
 
-      if (!uploadRes.ok) {
-        const errData = await uploadRes.json().catch(() => ({}));
-        throw new Error(errData.message || "Upload failed");
+        const uploadRes = await fetch("https://upload.imagekit.io/api/v1/files/upload", {
+          method: "POST",
+          body: formData,
+        });
+
+        if (!uploadRes.ok) {
+          const errData = await uploadRes.json().catch(() => ({}));
+          throw new Error(errData.message || "Upload failed");
+        }
+
+        const uploadData = await uploadRes.json();
+        imageUrl = uploadData.url;
+        imageFileId = uploadData.fileId;
+        thumbnailUrl = uploadData.thumbnailUrl || uploadData.url;
       }
 
-      const uploadData = await uploadRes.json();
-
-      // 3. Create element in DB
+      // Create element in DB
       const elementRes = await fetch(`/api/collections/${collectionId}/elements`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          imageUrl: uploadData.url,
-          imageFileId: uploadData.fileId,
-          thumbnailUrl: uploadData.thumbnailUrl || uploadData.url,
+          imageUrl,
+          imageFileId,
+          thumbnailUrl,
           description: description,
           tags,
         }),
@@ -255,7 +262,7 @@ export function CreateElementDialog({
         <DialogHeader>
           <DialogTitle>Add Element</DialogTitle>
           <DialogDescription>
-            Upload an image, add a description and tags.
+            Add an image, description, and/or tags. All fields are optional.
           </DialogDescription>
         </DialogHeader>
 
@@ -367,7 +374,7 @@ export function CreateElementDialog({
 
           {/* Description */}
           <div className="space-y-2">
-            <Label htmlFor="element-desc">Description</Label>
+              <Label htmlFor="element-desc">Description <span className="text-muted-foreground font-normal">(optional)</span></Label>
             <Textarea
               id="element-desc"
               placeholder="A brief description of this element..."
@@ -417,11 +424,11 @@ export function CreateElementDialog({
             </Button>
             <Button
               onClick={handleUpload}
-              disabled={uploading || !file || !description.trim()}
+              disabled={uploading || !hasContent}
               className="gap-2"
             >
               {uploading && <Loader2 className="h-4 w-4 animate-spin" />}
-              {uploading ? "Uploading..." : "Upload & Save"}
+              {uploading ? "Saving..." : "Save"}
             </Button>
           </div>
         </div>
