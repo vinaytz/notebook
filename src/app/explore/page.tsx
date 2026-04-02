@@ -271,7 +271,7 @@ function PublicCollectionDetail({
   const [activeTag, setActiveTag] = useState<string | null>(null);
   const [tagSearch, setTagSearch] = useState("");
   const [loading, setLoading] = useState(true);
-  const [lightboxElement, setLightboxElement] = useState<Element | null>(null);
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [subCollections, setSubCollections] = useState<Collection[]>([]);
   const [loadingSubCollections, setLoadingSubCollections] = useState(true);
 
@@ -490,7 +490,7 @@ function PublicCollectionDetail({
               {(element.thumbnailUrl || element.imageUrl) ? (
                 <div
                   className="relative aspect-square cursor-pointer overflow-hidden bg-muted"
-                  onClick={() => setLightboxElement(element)}
+                  onClick={() => setLightboxIndex(elements.indexOf(element))}
                 >
                   <img
                     src={element.thumbnailUrl || element.imageUrl}
@@ -503,7 +503,7 @@ function PublicCollectionDetail({
               ) : (
                 <div
                   className="flex aspect-square cursor-pointer items-center justify-center bg-muted"
-                  onClick={() => setLightboxElement(element)}
+                  onClick={() => setLightboxIndex(elements.indexOf(element))}
                 >
                   <ImageIcon className="h-8 w-8 text-muted-foreground/40" />
                 </div>
@@ -534,10 +534,11 @@ function PublicCollectionDetail({
         </div>
       )}
 
-      {lightboxElement && (
+      {lightboxIndex !== null && (
         <ImageLightbox
-          element={lightboxElement}
-          onClose={() => setLightboxElement(null)}
+          elements={elements}
+          initialIndex={lightboxIndex}
+          onClose={() => setLightboxIndex(null)}
         />
       )}
     </div>

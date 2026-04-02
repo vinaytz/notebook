@@ -90,7 +90,7 @@ export function CollectionDetail({
   const [deleting, setDeleting] = useState(false);
   const [isPublic, setIsPublic] = useState(collection.isPublic ?? false);
   const [togglingVisibility, setTogglingVisibility] = useState(false);
-  const [lightboxElement, setLightboxElement] = useState<Element | null>(null);
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
 
   // Edit collection state
   const [editCollectionOpen, setEditCollectionOpen] = useState(false);
@@ -541,7 +541,7 @@ export function CollectionDetail({
               {(element.thumbnailUrl || element.imageUrl) ? (
                 <div
                   className="relative aspect-square cursor-pointer overflow-hidden bg-muted"
-                  onClick={() => setLightboxElement(element)}
+                  onClick={() => setLightboxIndex(elements.indexOf(element))}
                 >
                   <img
                     src={element.thumbnailUrl || element.imageUrl}
@@ -554,7 +554,7 @@ export function CollectionDetail({
               ) : (
                 <div
                   className="flex aspect-square cursor-pointer items-center justify-center bg-muted"
-                  onClick={() => setLightboxElement(element)}
+                  onClick={() => setLightboxIndex(elements.indexOf(element))}
                 >
                   <ImageIcon className="h-8 w-8 text-muted-foreground/40" />
                 </div>
@@ -623,10 +623,11 @@ export function CollectionDetail({
       />
 
       {/* Image Lightbox */}
-      {lightboxElement && (
+      {lightboxIndex !== null && (
         <ImageLightbox
-          element={lightboxElement}
-          onClose={() => setLightboxElement(null)}
+          elements={elements}
+          initialIndex={lightboxIndex}
+          onClose={() => setLightboxIndex(null)}
         />
       )}
 
